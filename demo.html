@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Eye Servo Animation – Canvas Projection</title>
+<style>
+  body{margin:0; font:14px/1.4 system-ui,sans-serif; background:#fff; color:#111;}
+  .wrap{display:grid; grid-template-columns:1fr; gap:16px; padding:16px; max-width:1100px; margin:0 auto}
+  @media(min-width:980px){ .wrap{grid-template-columns:1fr 1fr; min-height:100vh; align-items:start} }
+  .card{background:#fff; border:1px solid #ddd; border-radius:16px; box-shadow:0 8px 20px rgba(0,0,0,.04);}
+  .canvas-card{padding:0; aspect-ratio:1/1; display:flex;}
+  canvas{width:100%; height:100%; display:block; border-radius:16px; cursor: grab;}
+  .panel{padding:16px}
+  .row{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+  label{display:flex; flex-direction:column; font-size:12px; gap:4px}
+  input,select,textarea{border:1px solid #ccc; border-radius:8px; padding:6px;}
+  .btn{padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-weight:600}
+  .btn.primary{background:#111; color:#fff}
+  .btn.secondary{background:#f0f0f0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card canvas-card"><canvas id="cv" width="800" height="800"></canvas></div>
+  <div class="card panel">
+    <h1>Eye Servo Animation (Canvas)</h1>
+    <div class="row">
+      <label>Yaw <span id="yawLbl"></span><input type="range" id="yaw" min="-60" max="60" step="0.1" value="0"></label>
+      <label>Pitch <span id="pitchLbl"></span><input type="range" id="pitch" min="-60" max="60" step="0.1" value="0"></label>
+    </div>
+    <div class="row">
+      <label>MinYaw <input id="minYaw" type="number" value="-60"></label>
+      <label>MaxYaw <input id="maxYaw" type="number" value="60"></label>
+      <label>MinPitch <input id="minPitch" type="number" value="-60"></label>
+      <label>MaxPitch <input id="maxPitch" type="number" value="60"></label>
+    </div>
+    <div class="row">
+      <select id="preset">
+        <option>Center Sweep</option>
+        <option>Figure Eight</option>
+        <option>Blink Look</option>
+      </select>
+      <label>Speed ×<span id="speedLbl">1</span><input id="speed" type="range" min="0.1" max="3" step="0.1" value="1"></label>
+    </div>
+    <label><input type="checkbox" id="loop" checked> Loop</label>
+    <textarea id="csv"></textarea>
+    <div class="row">
+      <button class="btn primary" id="run">▶ Run</button>
+      <button class="btn secondary" id="stop">⏹ Stop</button>
+      <button class="btn secondary" id="crazy">🎃 Chaos</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  const cv=document.getElementById('cv');
+  const ctx=cv.getContext('2d');
+  const deg2rad=d=>d*Math.PI/180; const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
+
+  const yawEl=document.getElementById('yaw');
+  const pitchEl=document.getElementById('pitch');
+  const yawLbl=document.getElementById('yawLbl');
+  const pitchLbl=document.getElementById('pitchLbl');
+  const minYawEl=document.getElementById('minYaw');
+  const maxYawEl=document.getElementById('maxYaw');
+  const minPitchEl=document.getElementById('minPitch');
+  const maxPitchEl=document.getElementById('maxPitch');
+  const speedEl=document.getElementById('speed');
+  const speedLbl=document.getElementById('speedLbl');
+  const csvEl=document.getElementById('csv');
+  const runBtn=document.getElementById('run');
+  const stopBtn=document.getElementById('stop');
+  const crazyBtn=document.getElementById('crazy');
+  const presetEl=document.getElementById('preset');
+
+  const PRESETS={
+    'Center Sweep':`-60,0,600\n-30,0,600\n0,0,600\n30,0,600\n60,0,600\n0,0,600`,
+    'Figure Eight':`-40,20,500\n0,0,500\n40,-20,500\n0,0,500\n-40,-20,500\n0,0,500\n40,20,500\n0,0,500`,
+    'Blink Look':`0,15,300\n0,-15,300\n0,0,300\n30,0,500\n-30,0,500\n0,0,500`
+  };
+  csvEl.value=PRESETS['Center Sweep'];
+  presetEl.onchange=()=>{csvEl.value=PRESETS[presetEl.value]||''};
+
+  const state={yaw:0,pitch:0,minYaw:-60,maxYaw:60,minPitch:-60,maxPitch:60,speed:1,loop:true,R:300,anim:null,irisAngle:0.42,pupilAngle:0.14};
+
+  function sync(){
+    state.minYaw=+minYawEl.value; state.maxYaw=+maxYawEl.value;
+    state.minPitch=+minPitchEl.value; state.maxPitch=+maxPitchEl.value;
+    state.yaw=clamp(+yawEl.value,state.minYaw,state.maxYaw);
+    state.pitch=clamp(+pitchEl.value,state.minPitch,state.maxPitch);
+    yawLbl.textContent=state.yaw.toFixed(1)+"°"; pitchLbl.textContent=state.pitch.toFixed(1)+"°";
+    state.speed=+speedEl.value; speedLbl.textContent=state.speed;
+    state.loop=document.getElementById('loop').checked;
+  }
+  ;['input','change'].forEach(ev=>{
+    [yawEl,pitchEl,minYawEl,maxYawEl,minPitchEl,maxPitchEl,speedEl,document.getElementById('loop')].forEach(el=>el.addEventListener(ev,sync));
+  });
+  sync();
+
+  function parseCSV(t){return t.split(/\n/).map(l=>l.trim()).filter(Boolean).map(l=>{let[a,b,c]=l.split(/[,;\s]+/);return{yaw:+a,pitch:+b,dur:+c}})}
+
+  function startAnim(){
+    const q=parseCSV(csvEl.value).map(s=>({yaw:clamp(s.yaw,state.minYaw,state.maxYaw),pitch:clamp(s.pitch,state.minPitch,state.maxPitch),dur:s.dur}));
+    if(!q.length)return; state.anim={queue:q,i:0,t0:performance.now(),running:true}; requestAnimationFrame(stepAnim);
+  }
+  function stepAnim(now){
+    const st=state.anim;if(!st||!st.running)return;
+    const cur=st.queue[st.i];
+    const prev=st.queue[(st.i-1+st.queue.length)%st.queue.length]||cur;
+    const t=(now-st.t0)*state.speed;
+    const prog=Math.min(1,t/cur.dur);
+    state.yaw=prev.yaw+(cur.yaw-prev.yaw)*prog;
+    state.pitch=prev.pitch+(cur.pitch-prev.pitch)*prog;
+    yawEl.value=state.yaw.toFixed(1); pitchEl.value=state.pitch.toFixed(1);
+    yawLbl.textContent=state.yaw.toFixed(1)+"°"; pitchLbl.textContent=state.pitch.toFixed(1)+"°";
+    draw();
+    if(prog>=1){st.i++;st.t0=now;if(st.i>=st.queue.length){if(state.loop)st.i=0;else{st.running=false;return;}}}
+    requestAnimationFrame(stepAnim);
+  }  
+
+  function stopAnim(){if(state.anim)state.anim.running=false;}
+
+  function crazyAnim(){
+    state.anim={running:true};
+    let phase='jump',t0=performance.now();let sx=state.yaw,sy=state.pitch;let tx=randomYaw(),ty=randomPitch();let holdFor=200;
+    function randomYaw(){return clamp((Math.random()*(state.maxYaw-state.minYaw)+state.minYaw),state.minYaw,state.maxYaw);} 
+    function randomPitch(){return clamp((Math.random()*(state.maxPitch-state.minPitch)+state.minPitch),state.minPitch,state.maxPitch);} 
+    function tick(now){
+      if(!state.anim.running)return;
+      const dt=(now-t0)*state.speed;
+      if(phase==='jump'){
+        const prog=Math.min(1,dt/120);
+        state.yaw=sx+(tx-sx)*prog;
+        state.pitch=sy+(ty-sy)*prog;
+        yawEl.value=state.yaw.toFixed(1); pitchEl.value=state.pitch.toFixed(1);
+        yawLbl.textContent=state.yaw.toFixed(1)+"°"; pitchLbl.textContent=state.pitch.toFixed(1)+"°";
+        draw();
+        if(prog>=1){phase='hold';t0=now;holdFor=200+Math.random()*600;}
+      }else{
+        draw();
+        if(dt>=holdFor){phase='jump';t0=now;sx=state.yaw;sy=state.pitch;tx=randomYaw();ty=randomPitch();}
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  } 
+
+  runBtn.onclick=startAnim; stopBtn.onclick=stopAnim; crazyBtn.onclick=crazyAnim;
+
+  // === Pointer drag to control gaze ===
+  let isDrag=false, activeId=null;
+  function setGazeFromPointer(e){
+    const rect=cv.getBoundingClientRect();
+    const sx=cv.width/rect.width, sy=cv.height/rect.height;
+    const px=(e.clientX-rect.left)*sx;
+    const py=(e.clientY-rect.top)*sy;
+    const cx=cv.width/2, cy=cv.height/2, R=state.R;
+    const dx=px-cx, dy=py-cy;
+    const r2=dx*dx+dy*dy;
+    if(!isDrag){ if(r2>R*R) return; }
+    // map pointer -> unit gaze vector using our orthographic placement
+    const k = R*Math.cos(state.irisAngle);
+    let gx = dx / k;
+    let gy = -dy / k;
+    const l2 = gx*gx + gy*gy;
+    if(l2>1){ const s=1/Math.sqrt(l2); gx*=s; gy*=s; }
+    const gz = Math.sqrt(Math.max(0, 1 - gx*gx - gy*gy));
+    const pitch = -Math.asin(gy)*180/Math.PI;
+    const yaw = Math.atan2(gx, gz)*180/Math.PI;
+    state.yaw = clamp(Math.round(yaw*10)/10, state.minYaw, state.maxYaw);
+    state.pitch = clamp(Math.round(pitch*10)/10, state.minPitch, state.maxPitch);
+    yawEl.value=state.yaw.toFixed(1); pitchEl.value=state.pitch.toFixed(1);
+    yawLbl.textContent=state.yaw.toFixed(1)+"°"; pitchLbl.textContent=state.pitch.toFixed(1)+"°";
+    draw();
+  }
+
+  cv.addEventListener('pointerdown', (e)=>{
+    stopAnim();
+    isDrag=true; activeId=e.pointerId;
+    if(cv.setPointerCapture) cv.setPointerCapture(e.pointerId);
+    cv.style.cursor='grabbing';
+    setGazeFromPointer(e);
+  });
+  cv.addEventListener('pointermove', (e)=>{ if(!isDrag || e.pointerId!==activeId) return; setGazeFromPointer(e); });
+  function endDrag(e){
+    if(!isDrag || (e && e.pointerId!==activeId)) return;
+    isDrag=false; activeId=null;
+    if(cv.releasePointerCapture && e) cv.releasePointerCapture(e.pointerId);
+    cv.style.cursor='grab';
+  }
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
+  cv.addEventListener('pointerleave', endDrag);
+
+  function draw(){
+    const w=cv.width,h=cv.height; ctx.clearRect(0,0,w,h);
+    const cx=w/2, cy=h/2, R=state.R;
+
+    // === helpers ===
+    const TAU=Math.PI*2;
+    const vec3=(x=0,y=0,z=0)=>({x,y,z});
+    const add=(a,b)=>vec3(a.x+b.x,a.y+b.y,a.z+b.z);
+    const mul=(a,s)=>vec3(a.x*s,a.y*s,a.z*s);
+    const norm=v=>{const L=Math.hypot(v.x,v.y,v.z)||1; return mul(v,1/L)};
+    const cross=(a,b)=>vec3(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x);
+    function gazeVec(pitchDeg,yawDeg){
+      const p=deg2rad(pitchDeg), y=deg2rad(yawDeg);
+      const cp=Math.cos(p), sp=Math.sin(p); const cy=Math.cos(y), sy=Math.sin(y);
+      return norm(vec3(sy*cp, -sp, cy*cp));
+    }
+    function sphericalDisk2D(g, th, steps, R){
+      const up = Math.abs(g.z) < 0.99 ? vec3(0,0,1) : vec3(0,1,0);
+      const a = norm(cross(up, g));
+      const b = norm(cross(g, a));
+      const pts=[];
+      for(let i=0;i<steps;i++){
+        const t = i/steps*TAU;
+        const dir = norm(add(mul(g, Math.cos(th)), add(mul(a, Math.sin(th)*Math.cos(t)), mul(b, Math.sin(th)*Math.sin(t)))));
+        const p = mul(dir, R);
+        pts.push([p.x, p.y]);
+      }
+      return pts;
+    }
+    function drawDisk(g, ang, fillStyle){
+      const pts = sphericalDisk2D(g, ang, 128, R);
+      for(let i=0;i<pts.length;i++){ pts[i][0]+=cx; pts[i][1]=cy-pts[i][1]; }
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath(); ctx.fillStyle = fillStyle; ctx.fill();
+    }
+
+    // sclera
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#cfd4dc'; ctx.lineWidth=Math.max(1,R*0.015);
+    ctx.beginPath(); ctx.arc(cx,cy,R-ctx.lineWidth*0.5,0,Math.PI*2); ctx.stroke();
+
+    // true spherical direction
+    const g = gazeVec(state.pitch, state.yaw);
+
+    // iris gradient anchored to projected iris center
+    const icx = cx + g.x * R * Math.cos(state.irisAngle);
+    const icy = cy - g.y * R * Math.cos(state.irisAngle);
+    const irad = R * Math.sin(state.irisAngle);
+    const irisGrad = ctx.createRadialGradient(icx, icy, 1, icx, icy, Math.max(4, irad));
+    irisGrad.addColorStop(0.0, '#1b4e7b');
+    irisGrad.addColorStop(0.5, '#27699e');
+    irisGrad.addColorStop(1.0, 'rgba(20,40,60,0.0)');
+
+    // draw iris & pupil as spherical small-circles
+    drawDisk(g, state.irisAngle, irisGrad);
+    drawDisk(g, state.pupilAngle, '#000');
+
+    // label
+    ctx.fillStyle='#111'; ctx.font=Math.round(R*0.09)+"px system-ui, sans-serif";
+    ctx.textAlign='center'; ctx.fillText(`yaw ${state.yaw.toFixed(1)}°, pitch ${state.pitch.toFixed(1)}°`, cx, cy+R*1.25);
+  }
+  function loop(){draw();requestAnimationFrame(loop);}loop();
+})();
+</script>
+</body>
+</html>
