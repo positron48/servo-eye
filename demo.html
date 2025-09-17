@@ -159,17 +159,34 @@
     const dx=px-cx, dy=py-cy;
     const r2=dx*dx+dy*dy;
     if(!isDrag){ if(r2>R*R) return; }
-    // map pointer -> unit gaze vector using our orthographic placement
+    // Map pointer -> nearest valid gaze (avoid yaw flipping near poles)
     const k = R*Math.cos(state.irisAngle);
-    let gx = dx / k;
-    let gy = -dy / k;
-    const l2 = gx*gx + gy*gy;
-    if(l2>1){ const s=1/Math.sqrt(l2); gx*=s; gy*=s; }
-    const gz = Math.sqrt(Math.max(0, 1 - gx*gx - gy*gy));
-    const pitch = -Math.asin(gy)*180/Math.PI;
-    const yaw = Math.atan2(gx, gz)*180/Math.PI;
-    state.yaw = clamp(Math.round(yaw*10)/10, state.minYaw, state.maxYaw);
-    state.pitch = clamp(Math.round(pitch*10)/10, state.minPitch, state.maxPitch);
+    let gx0 = dx / k;   // desired g.x from pointer
+    let gy0 = -dy / k;  // desired g.y from pointer
+
+    // Clamp to sphere domain for inversion
+    gx0 = clamp(gx0, -1, 1);
+    gy0 = clamp(gy0, -1, 1);
+
+    // Derive pitch from gy, then clamp to allowed range
+    let pitchDeg = -Math.asin(gy0)*180/Math.PI;
+    pitchDeg = clamp(Math.round(pitchDeg*10)/10, state.minPitch, state.maxPitch);
+
+    // For the clamped pitch, choose yaw that best matches pointer x (closest point)
+    const cp = Math.cos(deg2rad(pitchDeg));
+    let yawDeg;
+    if(cp < 1e-6){
+      // Near pole: keep current yaw to avoid discontinuities
+      yawDeg = state.yaw;
+    }else{
+      let sinYaw = gx0 / cp;
+      sinYaw = clamp(sinYaw, -1, 1);
+      yawDeg = Math.asin(sinYaw)*180/Math.PI;
+    }
+    yawDeg = clamp(Math.round(yawDeg*10)/10, state.minYaw, state.maxYaw);
+
+    state.yaw = yawDeg;
+    state.pitch = pitchDeg;
     yawEl.value=state.yaw.toFixed(1); pitchEl.value=state.pitch.toFixed(1);
     yawLbl.textContent=state.yaw.toFixed(1)+"°"; pitchLbl.textContent=state.pitch.toFixed(1)+"°";
     draw();
