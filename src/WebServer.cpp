@@ -1,0 +1,115 @@
+#include "WebServer.h"
+#include "ui_html.h"
+#include "ServoController.h"
+#include "SettingsManager.h"
+
+// Forward declarations
+struct EyeState {
+  float yaw;
+  float pitch;
+  bool animationRunning;
+  String currentPreset;
+  float speed;
+  bool loop;
+};
+
+extern EyeState eyeState;
+extern ServoController servoController;
+extern SettingsManager settingsManager;
+
+WebServer::WebServer(ESP8266WebServer* server) : server(server) {
+}
+
+void WebServer::setupRoutes() {
+  // Serve main page
+  server->on("/", [this]() {
+    serveCompressedHTML(ui_html_data, ui_html_size);
+  });
+
+  // API endpoints
+  server->on("/api/position", HTTP_POST, [this]() {
+    if (server->hasArg("yaw") && server->hasArg("pitch")) {
+      float yaw = server->arg("yaw").toFloat();
+      float pitch = server->arg("pitch").toFloat();
+      
+      // Update global state
+      eyeState.yaw = yaw;
+      eyeState.pitch = pitch;
+      
+      // Update servo controller
+      servoController.setPosition(yaw, pitch);
+      
+      server->send(200, "application/json", "{\"status\":\"ok\"}");
+    } else {
+      server->send(400, "application/json", "{\"error\":\"Missing parameters\"}");
+    }
+  });
+
+  server->on("/api/position", HTTP_GET, [this]() {
+    JsonDocument doc;
+    doc["yaw"] = eyeState.yaw;
+    doc["pitch"] = eyeState.pitch;
+    doc["animationRunning"] = eyeState.animationRunning;
+    doc["currentPreset"] = eyeState.currentPreset;
+    doc["speed"] = eyeState.speed;
+    doc["loop"] = eyeState.loop;
+    
+    String response;
+    serializeJson(doc, response);
+    server->send(200, "application/json", response);
+  });
+
+  server->on("/api/animation", HTTP_POST, [this]() {
+    if (server->hasArg("action")) {
+      String action = server->arg("action");
+      
+      if (action == "start") {
+        if (server->hasArg("data")) {
+          String data = server->arg("data");
+          servoController.startAnimation(data);
+          eyeState.animationRunning = true;
+        }
+      } else if (action == "stop") {
+        servoController.stopAnimation();
+        eyeState.animationRunning = false;
+      }
+      
+      server->send(200, "application/json", "{\"status\":\"ok\"}");
+    } else {
+      server->send(400, "application/json", "{\"error\":\"Missing action parameter\"}");
+    }
+  });
+
+  server->on("/api/settings", HTTP_POST, [this]() {
+    if (server->hasArg("preset")) {
+      eyeState.currentPreset = server->arg("preset");
+    }
+    if (server->hasArg("speed")) {
+      eyeState.speed = server->arg("speed").toFloat();
+    }
+    if (server->hasArg("loop")) {
+      eyeState.loop = server->arg("loop") == "true";
+    }
+    
+    // Save settings
+    settingsManager.saveSettings(eyeState.yaw, eyeState.pitch, eyeState.currentPreset, eyeState.speed, eyeState.loop);
+    
+    server->send(200, "application/json", "{\"status\":\"ok\"}");
+  });
+
+  server->on("/api/settings", HTTP_GET, [this]() {
+    JsonDocument doc;
+    doc["preset"] = eyeState.currentPreset;
+    doc["speed"] = eyeState.speed;
+    doc["loop"] = eyeState.loop;
+    
+    String response;
+    serializeJson(doc, response);
+    server->send(200, "application/json", response);
+  });
+}
+
+void WebServer::serveCompressedHTML(const char* htmlData, size_t htmlSize) {
+  // Send HTML directly - no decoding needed
+  server->send(200, "text/html", htmlData);
+}

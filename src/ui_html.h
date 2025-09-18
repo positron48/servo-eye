@@ -1,9 +1,17 @@
-<!DOCTYPE html>
+#ifndef UI_HTML_H
+#define UI_HTML_H
+
+#include <Arduino.h>
+
+// Auto-generated from ui.html
+// Size: 19428 bytes
+
+const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Eye Servo Animation – Canvas Projection</title>
+<title>Eye Servo Animation – ESP8266 Controller</title>
 <style>
   body{margin:0; font:14px/1.4 "Roboto", system-ui, sans-serif; background:#fafafa; color:#212121;}
   .wrap{display:grid; grid-template-columns:1fr; gap:16px; padding:16px; max-width:1200px; margin:0 auto}
@@ -40,6 +48,9 @@
   .button-group{display:flex; gap:8px; justify-content:center; margin-top:16px; flex-wrap:wrap;}
   @media(max-width:767px){ .button-group{flex-direction:column} .btn{width:100%; text-align:center} }
   .value-display{font-weight:500; color:#2196f3; font-size:13px;}
+  .status{text-align:center; margin:10px 0; padding:8px; background:#e8f5e8; border-radius:4px; color:#2e7d32;}
+  .error{background:#ffebee; color:#c62828;}
+  .warning{background:#fff3e0; color:#ef6c00;}
 </style>
 </head>
 <body>
@@ -47,12 +58,13 @@
   <div class="card canvas-card"><canvas id="cv" width="800" height="800"></canvas></div>
   <div class="card panel">
     <h1>Eye Servo Animation</h1>
+    <div id="status" class="status">Connecting to ESP8266...</div>
     
     <div class="control-group">
       <h3>Position</h3>
       <div class="row">
-        <label>Yaw <span id="yawLbl" class="value-display"></span><input type="range" id="yaw" min="-60" max="60" step="0.1" value="0"></label>
-        <label>Pitch <span id="pitchLbl" class="value-display"></span><input type="range" id="pitch" min="-60" max="60" step="0.1" value="0"></label>
+        <label>Yaw <span id="yawLbl" class="value-display">0.0°</span><input type="range" id="yaw" min="-60" max="60" step="0.1" value="0"></label>
+        <label>Pitch <span id="pitchLbl" class="value-display">0.0°</span><input type="range" id="pitch" min="-60" max="60" step="0.1" value="0"></label>
       </div>
     </div>
 
@@ -75,7 +87,7 @@
           <option>Blink Look</option>
           <option>Circle</option>
         </select></label>
-        <label>Speed <span id="speedLbl" class="value-display">1</span><input id="speed" type="range" min="0.1" max="3" step="0.1" value="1"></label>
+        <label>Speed <span id="speedLbl" class="value-display">1.0</span><input id="speed" type="range" min="0.1" max="3" step="0.1" value="1"></label>
         <label class="label-row"><input type="checkbox" id="loop" checked> Loop</label>
       </div>
     </div>
@@ -113,6 +125,7 @@
   const stopBtn=document.getElementById('stop');
   const crazyBtn=document.getElementById('crazy');
   const presetEl=document.getElementById('preset');
+  const statusEl=document.getElementById('status');
 
   const PRESETS={
     'Center Sweep':`-60,0,600\n-30,0,600\n0,0,600\n30,0,600\n60,0,600\n0,0,600`,
@@ -120,31 +133,185 @@
     'Blink Look':`0,15,300\n0,-15,300\n0,0,300\n30,0,500\n-30,0,500\n0,0,500`,
     'Circle':`30,0,200\n28,11,200\n21,21,200\n11,28,200\n0,30,200\n-11,28,200\n-21,21,200\n-28,11,200\n-30,0,200\n-28,-11,200\n-21,-21,200\n-11,-28,200\n0,-30,200\n11,-28,200\n21,-21,200\n28,-11,200`
   };
-  csvEl.value=PRESETS['Center Sweep'];
-  presetEl.onchange=()=>{csvEl.value=PRESETS[presetEl.value]||''};
 
   const state={yaw:0,pitch:0,minYaw:-60,maxYaw:60,minPitch:-60,maxPitch:60,speed:1,loop:true,R:300,anim:null,irisAngle:0.42,pupilAngle:0.14};
+
+  // Throttling for position updates (200ms)
+  let lastPositionUpdate = 0;
+  let pendingPosition = null;
+  const POSITION_THROTTLE_MS = 200;
+
+  // API functions
+  async function sendPosition(yaw, pitch) {
+    const now = Date.now();
+    pendingPosition = {yaw, pitch};
+    
+    if (now - lastPositionUpdate < POSITION_THROTTLE_MS) {
+      return; // Skip this update, will be sent by timeout
+    }
+    
+    await sendPositionImmediate(yaw, pitch);
+  }
+
+  async function sendPositionImmediate(yaw, pitch) {
+    try {
+      const response = await fetch('/api/position', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `yaw=${yaw}&pitch=${pitch}`
+      });
+      if (!response.ok) throw new Error('Network error');
+      updateStatus('Connected to ESP8266', 'status');
+      lastPositionUpdate = Date.now();
+      
+      // Check if there's a pending position to send
+      if (pendingPosition && (pendingPosition.yaw !== yaw || pendingPosition.pitch !== pitch)) {
+        setTimeout(() => {
+          if (pendingPosition) {
+            sendPositionImmediate(pendingPosition.yaw, pendingPosition.pitch);
+            pendingPosition = null;
+          }
+        }, POSITION_THROTTLE_MS);
+      } else {
+        pendingPosition = null;
+      }
+    } catch (error) {
+      updateStatus('Connection error: ' + error.message, 'error');
+    }
+  }
+
+  async function startAnimation() {
+    try {
+      const response = await fetch('/api/animation', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `action=start&data=${encodeURIComponent(csvEl.value)}`
+      });
+      if (!response.ok) throw new Error('Network error');
+      updateStatus('Animation started', 'status');
+    } catch (error) {
+      updateStatus('Animation error: ' + error.message, 'error');
+    }
+  }
+
+  async function stopAnimation() {
+    try {
+      const response = await fetch('/api/animation', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'action=stop'
+      });
+      if (!response.ok) throw new Error('Network error');
+      updateStatus('Animation stopped', 'status');
+    } catch (error) {
+      updateStatus('Stop error: ' + error.message, 'error');
+    }
+  }
+
+  async function saveSettings() {
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `preset=${encodeURIComponent(presetEl.value)}&speed=${speedEl.value}&loop=${document.getElementById('loop').checked}`
+      });
+      if (!response.ok) throw new Error('Network error');
+      updateStatus('Settings saved', 'status');
+    } catch (error) {
+      updateStatus('Save error: ' + error.message, 'error');
+    }
+  }
+
+  async function loadSettings() {
+    try {
+      const response = await fetch('/api/settings');
+      if (!response.ok) throw new Error('Network error');
+      const data = await response.json();
+      
+      presetEl.value = data.preset || 'Center Sweep';
+      speedEl.value = data.speed || 1;
+      document.getElementById('loop').checked = data.loop !== false;
+      
+      csvEl.value = PRESETS[presetEl.value] || '';
+      updateSpeedLabel();
+      updateStatus('Settings loaded', 'status');
+    } catch (error) {
+      updateStatus('Load error: ' + error.message, 'error');
+    }
+  }
+
+  async function loadPosition() {
+    try {
+      const response = await fetch('/api/position');
+      if (!response.ok) throw new Error('Network error');
+      const data = await response.json();
+      
+      state.yaw = data.yaw || 0;
+      state.pitch = data.pitch || 0;
+      yawEl.value = state.yaw;
+      pitchEl.value = state.pitch;
+      updateLabels();
+      updateStatus('Position loaded', 'status');
+    } catch (error) {
+      updateStatus('Position load error: ' + error.message, 'error');
+    }
+  }
+
+  function updateStatus(message, type = 'status') {
+    statusEl.textContent = message;
+    statusEl.className = `status ${type}`;
+    if (type === 'error' || type === 'warning') {
+      setTimeout(() => {
+        statusEl.textContent = 'Connected to ESP8266';
+        statusEl.className = 'status';
+      }, 3000);
+    }
+  }
+
+  function updateSpeedLabel() {
+    speedLbl.textContent = speedEl.value;
+  }
+
+  function updateLabels() {
+    yawLbl.textContent = state.yaw.toFixed(1) + "°";
+    pitchLbl.textContent = state.pitch.toFixed(1) + "°";
+  }
+
+  // Initialize
+  csvEl.value=PRESETS['Center Sweep'];
+  presetEl.onchange=()=>{
+    csvEl.value=PRESETS[presetEl.value]||'';
+    saveSettings();
+  };
 
   function sync(){
     state.minYaw=+minYawEl.value; state.maxYaw=+maxYawEl.value;
     state.minPitch=+minPitchEl.value; state.maxPitch=+maxPitchEl.value;
     state.yaw=clamp(+yawEl.value,state.minYaw,state.maxYaw);
     state.pitch=clamp(+pitchEl.value,state.minPitch,state.maxPitch);
-    yawLbl.textContent=state.yaw.toFixed(1)+"°"; pitchLbl.textContent=state.pitch.toFixed(1)+"°";
-    state.speed=+speedEl.value; speedLbl.textContent=state.speed;
+    updateLabels();
+    state.speed=+speedEl.value; updateSpeedLabel();
     state.loop=document.getElementById('loop').checked;
+    
+    // Send position to ESP8266
+    sendPosition(state.yaw, state.pitch);
   }
+
   ;['input','change'].forEach(ev=>{
     [yawEl,pitchEl,minYawEl,maxYawEl,minPitchEl,maxPitchEl,speedEl,document.getElementById('loop')].forEach(el=>el.addEventListener(ev,sync));
   });
-  sync();
 
+  // Animation functions
   function parseCSV(t){return t.split(/\n/).map(l=>l.trim()).filter(Boolean).map(l=>{let[a,b,c]=l.split(/[,;\s]+/);return{yaw:+a,pitch:+b,dur:+c}})}
 
   function startAnim(){
     const q=parseCSV(csvEl.value).map(s=>({yaw:clamp(s.yaw,state.minYaw,state.maxYaw),pitch:clamp(s.pitch,state.minPitch,state.maxPitch),dur:s.dur}));
-    if(!q.length)return; state.anim={queue:q,i:0,t0:performance.now(),running:true}; requestAnimationFrame(stepAnim);
+    if(!q.length)return; 
+    state.anim={queue:q,i:0,t0:performance.now(),running:true}; 
+    startAnimation();
+    requestAnimationFrame(stepAnim);
   }
+
   function stepAnim(now){
     const st=state.anim;if(!st||!st.running)return;
     const cur=st.queue[st.i];
@@ -154,13 +321,16 @@
     state.yaw=prev.yaw+(cur.yaw-prev.yaw)*prog;
     state.pitch=prev.pitch+(cur.pitch-prev.pitch)*prog;
     yawEl.value=state.yaw.toFixed(1); pitchEl.value=state.pitch.toFixed(1);
-    yawLbl.textContent=state.yaw.toFixed(1)+"°"; pitchLbl.textContent=state.pitch.toFixed(1)+"°";
+    updateLabels();
     draw();
-    if(prog>=1){st.i++;st.t0=now;if(st.i>=st.queue.length){if(state.loop)st.i=0;else{st.running=false;return;}}}
+    if(prog>=1){st.i++;st.t0=now;if(st.i>=st.queue.length){if(state.loop)st.i=0;else{st.running=false;stopAnimation();return;}}}
     requestAnimationFrame(stepAnim);
   }  
 
-  function stopAnim(){if(state.anim)state.anim.running=false;}
+  function stopAnim(){
+    if(state.anim)state.anim.running=false;
+    stopAnimation();
+  }
 
   function crazyAnim(){
     state.anim={running:true};
@@ -175,8 +345,9 @@
         state.yaw=sx+(tx-sx)*prog;
         state.pitch=sy+(ty-sy)*prog;
         yawEl.value=state.yaw.toFixed(1); pitchEl.value=state.pitch.toFixed(1);
-        yawLbl.textContent=state.yaw.toFixed(1)+"°"; pitchLbl.textContent=state.pitch.toFixed(1)+"°";
+        updateLabels();
         draw();
+        sendPosition(state.yaw, state.pitch);
         if(prog>=1){phase='hold';t0=now;holdFor=200+Math.random()*600;}
       }else{
         draw();
@@ -189,7 +360,7 @@
 
   runBtn.onclick=startAnim; stopBtn.onclick=stopAnim; crazyBtn.onclick=crazyAnim;
 
-  // === Pointer drag to control gaze ===
+  // Pointer drag to control gaze
   let isDrag=false, activeId=null;
   function setGazeFromPointer(e){
     const rect=cv.getBoundingClientRect();
@@ -200,24 +371,16 @@
     const dx=px-cx, dy=py-cy;
     const r2=dx*dx+dy*dy;
     if(!isDrag){ if(r2>R*R) return; }
-    // Map pointer -> nearest valid gaze (avoid yaw flipping near poles)
     const k = R*Math.cos(state.irisAngle);
-    let gx0 = dx / k;   // desired g.x from pointer
-    let gy0 = -dy / k;  // desired g.y from pointer
-
-    // Clamp to sphere domain for inversion
+    let gx0 = dx / k;
+    let gy0 = -dy / k;
     gx0 = clamp(gx0, -1, 1);
     gy0 = clamp(gy0, -1, 1);
-
-    // Derive pitch from gy, then clamp to allowed range
     let pitchDeg = -Math.asin(gy0)*180/Math.PI;
     pitchDeg = clamp(Math.round(pitchDeg*10)/10, state.minPitch, state.maxPitch);
-
-    // For the clamped pitch, choose yaw that best matches pointer x (closest point)
     const cp = Math.cos(deg2rad(pitchDeg));
     let yawDeg;
     if(cp < 1e-6){
-      // Near pole: keep current yaw to avoid discontinuities
       yawDeg = state.yaw;
     }else{
       let sinYaw = gx0 / cp;
@@ -225,12 +388,12 @@
       yawDeg = Math.asin(sinYaw)*180/Math.PI;
     }
     yawDeg = clamp(Math.round(yawDeg*10)/10, state.minYaw, state.maxYaw);
-
     state.yaw = yawDeg;
     state.pitch = pitchDeg;
     yawEl.value=state.yaw.toFixed(1); pitchEl.value=state.pitch.toFixed(1);
-    yawLbl.textContent=state.yaw.toFixed(1)+"°"; pitchLbl.textContent=state.pitch.toFixed(1)+"°";
+    updateLabels();
     draw();
+    sendPosition(state.yaw, state.pitch);
   }
 
   cv.addEventListener('pointerdown', (e)=>{
@@ -254,8 +417,6 @@
   function draw(){
     const w=cv.width,h=cv.height; ctx.clearRect(0,0,w,h);
     const cx=w/2, cy=h/2, R=state.R;
-
-    // === helpers ===
     const TAU=Math.PI*2;
     const vec3=(x=0,y=0,z=0)=>({x,y,z});
     const add=(a,b)=>vec3(a.x+b.x,a.y+b.y,a.z+b.z);
@@ -287,26 +448,30 @@
       for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.closePath(); ctx.fillStyle = fillStyle; ctx.fill();
     }
-
-    // sclera
     ctx.fillStyle='#ffffff';
     ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle='#cfd4dc'; ctx.lineWidth=Math.max(1,R*0.015);
     ctx.beginPath(); ctx.arc(cx,cy,R-ctx.lineWidth*0.5,0,Math.PI*2); ctx.stroke();
-
-    // true spherical direction
     const g = gazeVec(state.pitch, state.yaw);
-
-    // draw iris & pupil as spherical small-circles
     drawDisk(g, state.irisAngle, '#27699e');
     drawDisk(g, state.pupilAngle, '#000');
-
-    // label
     ctx.fillStyle='#111'; ctx.font=Math.round(R*0.09)+"px system-ui, sans-serif";
     ctx.textAlign='center'; ctx.fillText(`yaw ${state.yaw.toFixed(1)}°, pitch ${state.pitch.toFixed(1)}°`, cx, cy+R*1.25);
   }
-  function loop(){draw();requestAnimationFrame(loop);}loop();
+  
+  function loop(){draw();requestAnimationFrame(loop);}
+  
+  // Initialize
+  sync();
+  loadSettings();
+  loadPosition();
+  loop();
 })();
 </script>
 </body>
 </html>
+)rawliteral";
+
+const size_t ui_html_size = 19428;
+
+#endif // UI_HTML_H
