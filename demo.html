@@ -5,50 +5,90 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Eye Servo Animation – Canvas Projection</title>
 <style>
-  body{margin:0; font:14px/1.4 system-ui,sans-serif; background:#fff; color:#111;}
-  .wrap{display:grid; grid-template-columns:1fr; gap:16px; padding:16px; max-width:1100px; margin:0 auto}
-  @media(min-width:980px){ .wrap{grid-template-columns:1fr 1fr; min-height:100vh; align-items:start} }
-  .card{background:#fff; border:1px solid #ddd; border-radius:16px; box-shadow:0 8px 20px rgba(0,0,0,.04);}
+  body{margin:0; font:14px/1.4 "Roboto", system-ui, sans-serif; background:#fafafa; color:#212121;}
+  .wrap{display:grid; grid-template-columns:1fr; gap:16px; padding:16px; max-width:1200px; margin:0 auto}
+  @media(min-width:768px){ .wrap{grid-template-columns:1fr 1fr; gap:20px; padding:20px} }
+  @media(min-width:1024px){ .wrap{gap:24px; padding:24px} }
+  .card{background:#fff; border-radius:4px; box-shadow:0 2px 4px rgba(0,0,0,0.1); overflow:hidden;}
   .canvas-card{padding:0; aspect-ratio:1/1; display:flex;}
-  canvas{width:100%; height:100%; display:block; border-radius:16px; cursor: grab;}
+  canvas{width:100%; height:100%; display:block; cursor: grab;}
+  canvas:active{cursor: grabbing;}
   .panel{padding:16px}
-  .row{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
-  label{display:flex; flex-direction:column; font-size:12px; gap:4px}
-  input,select,textarea{border:1px solid #ccc; border-radius:8px; padding:6px;}
-  .btn{padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-weight:600}
-  .btn.primary{background:#111; color:#fff}
-  .btn.secondary{background:#f0f0f0;}
+  @media(min-width:768px){ .panel{padding:20px} }
+  h1{font-size:20px; font-weight:500; color:#212121; margin:0 0 16px 0; text-align:center;}
+  .control-group{margin-bottom:16px;}
+  .control-group h3{font-size:12px; font-weight:500; color:#757575; margin:0 0 8px 0; text-transform:uppercase; letter-spacing:0.5px;}
+  .row{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:end;}
+  .row:first-child{margin-top:0;}
+  @media(max-width:767px){ .row{flex-direction:column; align-items:stretch; gap:12px} }
+  label{display:flex; flex-direction:column; font-size:12px; font-weight:400; gap:4px; color:#757575; min-width:70px;}
+  @media(max-width:767px){ label{min-width:auto} }
+  input,select,textarea{border:1px solid #e0e0e0; border-radius:4px; padding:8px 12px; font-size:14px; transition:border-color 0.2s ease; background:#fff; font-family:inherit;}
+  input:focus,select:focus,textarea:focus{outline:none; border-color:#2196f3; box-shadow:0 0 0 2px rgba(33,150,243,0.2);}
+  input[type="range"]{padding:0; height:4px; background:#e0e0e0; border:none; border-radius:2px;}
+  input[type="range"]::-webkit-slider-thumb{appearance:none; width:20px; height:20px; background:#2196f3; border-radius:50%; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.2);}
+  input[type="range"]::-moz-range-thumb{width:20px; height:20px; background:#2196f3; border-radius:50%; cursor:pointer; border:none; box-shadow:0 2px 4px rgba(0,0,0,0.2);}
+  input[type="checkbox"]{width:18px; height:18px; accent-color:#2196f3;}
+  .btn{padding:8px 16px; border-radius:4px; border:none; cursor:pointer; font-weight:500; font-size:14px; transition:all 0.2s ease; text-transform:uppercase; letter-spacing:0.5px;}
+  .btn.primary{background:#2196f3; color:#fff; box-shadow:0 2px 4px rgba(33,150,243,0.3);}
+  .btn.primary:hover{background:#1976d2; box-shadow:0 4px 8px rgba(33,150,243,0.4);}
+  .btn.secondary{background:#757575; color:#fff; box-shadow:0 2px 4px rgba(117,117,117,0.3);}
+  .btn.secondary:hover{background:#616161; box-shadow:0 4px 8px rgba(117,117,117,0.4);}
+  .label-row{flex-direction:row; align-items:center; gap:8px; min-width:auto;}
+  #csv{width:100%; min-height:180px; font-family:"Roboto Mono", ui-monospace, monospace; font-size:13px; line-height:1.4; background:#fafafa; border:1px solid #e0e0e0; border-radius:4px; padding:12px; resize:vertical;}
+  #csv:focus{border-color:#2196f3; box-shadow:0 0 0 2px rgba(33,150,243,0.2); background:#fff;}
+  .button-group{display:flex; gap:8px; justify-content:center; margin-top:16px; flex-wrap:wrap;}
+  @media(max-width:767px){ .button-group{flex-direction:column} .btn{width:100%; text-align:center} }
+  .value-display{font-weight:500; color:#2196f3; font-size:13px;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card canvas-card"><canvas id="cv" width="800" height="800"></canvas></div>
   <div class="card panel">
-    <h1>Eye Servo Animation (Canvas)</h1>
-    <div class="row">
-      <label>Yaw <span id="yawLbl"></span><input type="range" id="yaw" min="-60" max="60" step="0.1" value="0"></label>
-      <label>Pitch <span id="pitchLbl"></span><input type="range" id="pitch" min="-60" max="60" step="0.1" value="0"></label>
+    <h1>Eye Servo Animation</h1>
+    
+    <div class="control-group">
+      <h3>Position</h3>
+      <div class="row">
+        <label>Yaw <span id="yawLbl" class="value-display"></span><input type="range" id="yaw" min="-60" max="60" step="0.1" value="0"></label>
+        <label>Pitch <span id="pitchLbl" class="value-display"></span><input type="range" id="pitch" min="-60" max="60" step="0.1" value="0"></label>
+      </div>
     </div>
-    <div class="row">
-      <label>MinYaw <input id="minYaw" type="number" value="-60"></label>
-      <label>MaxYaw <input id="maxYaw" type="number" value="60"></label>
-      <label>MinPitch <input id="minPitch" type="number" value="-60"></label>
-      <label>MaxPitch <input id="maxPitch" type="number" value="60"></label>
+
+    <div class="control-group">
+      <h3>Limits</h3>
+      <div class="row">
+        <label>Min Yaw <input id="minYaw" type="number" value="-60"></label>
+        <label>Max Yaw <input id="maxYaw" type="number" value="60"></label>
+        <label>Min Pitch <input id="minPitch" type="number" value="-60"></label>
+        <label>Max Pitch <input id="maxPitch" type="number" value="60"></label>
+      </div>
     </div>
-    <div class="row">
-      <select id="preset">
-        <option>Center Sweep</option>
-        <option>Figure Eight</option>
-        <option>Blink Look</option>
-      </select>
-      <label>Speed ×<span id="speedLbl">1</span><input id="speed" type="range" min="0.1" max="3" step="0.1" value="1"></label>
+
+    <div class="control-group">
+      <h3>Animation</h3>
+      <div class="row">
+        <label>Preset <select id="preset">
+          <option>Center Sweep</option>
+          <option>Figure Eight</option>
+          <option>Blink Look</option>
+          <option>Circle</option>
+        </select></label>
+        <label>Speed <span id="speedLbl" class="value-display">1</span><input id="speed" type="range" min="0.1" max="3" step="0.1" value="1"></label>
+        <label class="label-row"><input type="checkbox" id="loop" checked> Loop</label>
+      </div>
     </div>
-    <label><input type="checkbox" id="loop" checked> Loop</label>
-    <textarea id="csv"></textarea>
-    <div class="row">
-      <button class="btn primary" id="run">▶ Run</button>
-      <button class="btn secondary" id="stop">⏹ Stop</button>
-      <button class="btn secondary" id="crazy">🎃 Chaos</button>
+
+    <div class="control-group">
+      <h3>Data</h3>
+      <textarea id="csv" rows="8" placeholder="yaw,pitch,duration"></textarea>
+    </div>
+
+    <div class="button-group">
+      <button class="btn primary" id="run">Run</button>
+      <button class="btn secondary" id="stop">Stop</button>
+      <button class="btn secondary" id="crazy">Chaos</button>
     </div>
   </div>
 </div>
@@ -77,7 +117,8 @@
   const PRESETS={
     'Center Sweep':`-60,0,600\n-30,0,600\n0,0,600\n30,0,600\n60,0,600\n0,0,600`,
     'Figure Eight':`-40,20,500\n0,0,500\n40,-20,500\n0,0,500\n-40,-20,500\n0,0,500\n40,20,500\n0,0,500`,
-    'Blink Look':`0,15,300\n0,-15,300\n0,0,300\n30,0,500\n-30,0,500\n0,0,500`
+    'Blink Look':`0,15,300\n0,-15,300\n0,0,300\n30,0,500\n-30,0,500\n0,0,500`,
+    'Circle':`30,0,200\n28,11,200\n21,21,200\n11,28,200\n0,30,200\n-11,28,200\n-21,21,200\n-28,11,200\n-30,0,200\n-28,-11,200\n-21,-21,200\n-11,-28,200\n0,-30,200\n11,-28,200\n21,-21,200\n28,-11,200`
   };
   csvEl.value=PRESETS['Center Sweep'];
   presetEl.onchange=()=>{csvEl.value=PRESETS[presetEl.value]||''};
@@ -256,17 +297,8 @@
     // true spherical direction
     const g = gazeVec(state.pitch, state.yaw);
 
-    // iris gradient anchored to projected iris center
-    const icx = cx + g.x * R * Math.cos(state.irisAngle);
-    const icy = cy - g.y * R * Math.cos(state.irisAngle);
-    const irad = R * Math.sin(state.irisAngle);
-    const irisGrad = ctx.createRadialGradient(icx, icy, 1, icx, icy, Math.max(4, irad));
-    irisGrad.addColorStop(0.0, '#1b4e7b');
-    irisGrad.addColorStop(0.5, '#27699e');
-    irisGrad.addColorStop(1.0, 'rgba(20,40,60,0.0)');
-
     // draw iris & pupil as spherical small-circles
-    drawDisk(g, state.irisAngle, irisGrad);
+    drawDisk(g, state.irisAngle, '#27699e');
     drawDisk(g, state.pupilAngle, '#000');
 
     // label
