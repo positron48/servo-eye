@@ -6,6 +6,7 @@ Control two hobby servos (yaw and pitch) from a responsive web UI hosted directl
 - [Overview](#overview)
 - [Features](#features)
 - [Hardware](#hardware)
+- [Mounting Options](#mounting-options)
 - [Quickstart](#quickstart)
 - [Build and flash](#build-and-flash)
 - [Web UI](#web-ui)
@@ -70,6 +71,32 @@ static const int PITCH_PIN = D6;  // GPIO12
 ```
 
 Other usable pins: D5 (GPIO14), D6 (GPIO12), D7 (GPIO13). Avoid D8 (GPIO15) because it is pulled low at boot.
+
+## Mounting Options
+
+The project includes 3D printable mounting arms and connectors for different installation scenarios:
+
+<p align="center">
+  <img src="images/arms.png" alt="Mounting arm options" width="800">
+  <br/>
+  <em>Three mounting arm options: long double-sided, long single-sided, and short single-sided</em>
+</p>
+
+<p align="center">
+  <img src="images/assemble.png" alt="Assembly example" width="600">
+  <br/>
+  <em>Example assembly with mounting arms and connectors</em>
+</p>
+
+### Available STL Files
+All 3D printable models are available in the [`model/`](model/) directory:
+
+- **`arm.stl`** - Long double-sided mounting arm
+- **`arm-long-one-side.stl`** - Long single-sided mounting arm  
+- **`arm-short-one-side.stl`** - Short single-sided mounting arm
+- **`eye.stl`** - Main eyeball housing
+- **`connector1.stl`** - Servo connector #1
+- **`connector2.stl`** - Servo connector #2
 
 ## Quickstart
 Steps:
@@ -222,6 +249,8 @@ firmware/
 ├── tools/                  Build tools (HTML → C++)
 ├── src/                    Firmware sources (C++)
 │   └── ui_html.h           Auto‑generated header
+├── images/                 Documentation images
+├── model/                  STL files for 3D printing
 ├── platformio.ini          PlatformIO configuration
 └── *.md                    Documentation
 ```
