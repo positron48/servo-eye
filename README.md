@@ -265,3 +265,4 @@ If you run into issues:
 3) Open an issue in the repository with details
 
 
+More exclusive content and real-time updates in my [Telegram channel](https://t.me/positroidlive)
