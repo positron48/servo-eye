@@ -112,9 +112,19 @@ void WebServer::setupRoutes() {
   server->on("/api/ota/status", HTTP_GET, [this]() {
     JsonDocument doc;
     doc["hostname"] = "eye";
-    doc["ip"] = WiFi.softAPIP().toString();
-    doc["mac"] = WiFi.softAPmacAddress();
-    doc["version"] = "1.0.1"; // You can update this version number
+    
+    // Get IP address based on current mode
+    if (WiFi.getMode() == WIFI_AP) {
+      doc["ip"] = WiFi.softAPIP().toString();
+      doc["mac"] = WiFi.softAPmacAddress();
+      doc["mode"] = "AP";
+    } else {
+      doc["ip"] = WiFi.localIP().toString();
+      doc["mac"] = WiFi.macAddress();
+      doc["mode"] = "STA";
+    }
+    
+    doc["version"] = "1.0.2"; // You can update this version number
     doc["uptime"] = millis() / 1000;
     doc["freeHeap"] = ESP.getFreeHeap();
     doc["flashSize"] = ESP.getFlashChipSize();
@@ -123,6 +133,39 @@ void WebServer::setupRoutes() {
     String response;
     serializeJson(doc, response);
     server->send(200, "application/json", response);
+  });
+
+  // WiFi settings endpoints
+  server->on("/api/wifi/settings", HTTP_GET, [this]() {
+    const EyeSettings& settings = settingsManager.getSettings();
+    JsonDocument doc;
+    doc["useWiFi"] = settings.useWiFi;
+    doc["ssid"] = settings.wifiSSID;
+    doc["password"] = settings.wifiPassword;
+    doc["currentMode"] = WiFi.getMode() == WIFI_AP ? "AP" : "STA";
+    doc["connected"] = WiFi.status() == WL_CONNECTED;
+    
+    String response;
+    serializeJson(doc, response);
+    server->send(200, "application/json", response);
+  });
+
+  server->on("/api/wifi/settings", HTTP_POST, [this]() {
+    if (server->hasArg("ssid") && server->hasArg("password") && server->hasArg("useWiFi")) {
+      String ssid = server->arg("ssid");
+      String password = server->arg("password");
+      bool useWiFi = server->arg("useWiFi") == "true";
+      
+      settingsManager.saveWiFiSettings(ssid, password, useWiFi);
+      
+      server->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"WiFi settings saved. Device will restart to apply changes.\"}");
+      
+      // Restart after a short delay to allow response to be sent
+      delay(1000);
+      ESP.restart();
+    } else {
+      server->send(400, "application/json", "{\"error\":\"Missing parameters\"}");
+    }
   });
 }
 

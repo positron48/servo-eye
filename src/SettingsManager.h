@@ -14,6 +14,10 @@ struct EyeSettings {
   float maxYaw;
   float minPitch;
   float maxPitch;
+  // WiFi settings
+  String wifiSSID;
+  String wifiPassword;
+  bool useWiFi;
 };
 
 class SettingsManager {
@@ -37,6 +41,7 @@ public:
   void loadSettings();
   void saveSettings(const EyeSettings& newSettings);
   void saveSettings(float yaw, float pitch, const String& preset, float speed, bool loop);
+  void saveWiFiSettings(const String& ssid, const String& password, bool useWiFi);
   
   const EyeSettings& getSettings() const { return settings; }
 };

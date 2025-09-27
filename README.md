@@ -258,6 +258,44 @@ firmware/
 ## License
 MIT License — free for personal and commercial use.
 
+## OTA Updates
+The firmware supports Over-The-Air (OTA) updates for wireless firmware updates.
+
+### Quick OTA Commands
+```bash
+# USB upload (first time or when OTA fails)
+pio run -e d1_mini -t upload
+
+# OTA upload (wireless)
+pio run -e d1_mini_ota -t upload
+```
+
+### OTA Configuration
+- **Hostname**: `eye.local`
+- **Port**: `8266`
+- **Password**: `12345678`
+- **WiFi Network**: `EyeController`
+
+### WiFi Configuration
+The device supports both WiFi client and Access Point modes:
+
+- **Access Point Mode**: Default mode, creates "EyeController" network (password: 12345678)
+- **WiFi Client Mode**: Connect to your home WiFi network via web interface
+- **Auto Fallback**: If WiFi connection fails, automatically switches to AP mode
+
+### WiFi Setup via Web Interface
+1. Connect to "EyeController" network (password: 12345678)
+2. Open web interface at `http://eye.local` or `http://192.168.4.1`
+3. Go to "System Information" → "WiFi Settings"
+4. Enable "Use WiFi Connection" and enter your network credentials
+5. Click "Save WiFi Settings" - device will restart and connect to your network
+
+### Troubleshooting OTA
+- Ensure you're connected to "EyeController" WiFi network (or your configured network)
+- If `eye.local` doesn't work, try IP address: `192.168.4.1` (AP mode) or your network IP
+- Check serial monitor for OTA status messages
+- Use USB upload if OTA fails
+
 ## Support
 If you run into issues:
 1) Check hardware connections and power

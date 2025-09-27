@@ -11,8 +11,14 @@
 #include "WebServer.h"
 
 // WiFi AP settings
-const char* ssid = "EyeController";
-const char* password = "12345678";
+const char* apSSID = "EyeController";
+const char* apPassword = "12345678";
+
+// WiFi connection state
+bool wifiConnected = false;
+bool apModeActive = false;
+unsigned long wifiConnectStartTime = 0;
+const unsigned long WIFI_CONNECT_TIMEOUT = 10000; // 10 seconds
 
 // Web server
 ESP8266WebServer server(80);
@@ -33,6 +39,11 @@ struct EyeState {
   float speed = 1.0;
   bool loop = true;
 } eyeState;
+
+// Forward declarations
+void setupWiFi();
+void startAPMode();
+void checkWiFiConnection();
 
 // OTA setup function
 void setupOTA() {
@@ -68,6 +79,49 @@ void setupOTA() {
   Serial.println("OTA Port: 8266");
 }
 
+void setupWiFi() {
+  const EyeSettings& settings = settingsManager.getSettings();
+  
+  if (settings.useWiFi && settings.wifiSSID.length() > 0) {
+    Serial.println("Attempting to connect to WiFi: " + settings.wifiSSID);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(settings.wifiSSID.c_str(), settings.wifiPassword.c_str());
+    wifiConnectStartTime = millis();
+    wifiConnected = false;
+    apModeActive = false;
+  } else {
+    Serial.println("No WiFi configured, starting AP mode");
+    startAPMode();
+  }
+}
+
+void startAPMode() {
+  Serial.println("Starting Access Point mode");
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(apSSID, apPassword);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+  apModeActive = true;
+  wifiConnected = false;
+}
+
+void checkWiFiConnection() {
+  if (apModeActive) return; // Already in AP mode
+  
+  if (!wifiConnected) {
+    if (WiFi.status() == WL_CONNECTED) {
+      wifiConnected = true;
+      Serial.println("WiFi connected!");
+      Serial.print("IP address: ");
+      Serial.println(WiFi.localIP());
+    } else if (millis() - wifiConnectStartTime > WIFI_CONNECT_TIMEOUT) {
+      Serial.println("WiFi connection timeout, switching to AP mode");
+      startAPMode();
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("Starting Eye Controller...");
@@ -89,11 +143,8 @@ void setup() {
   eyeState.speed = settings.speed;
   eyeState.loop = settings.loop;
   
-  // Setup WiFi AP
-  WiFi.softAP(ssid, password);
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(IP);
+  // Setup WiFi
+  setupWiFi();
 
   // Setup mDNS for eye.local
   if (MDNS.begin("eye")) {
@@ -113,6 +164,9 @@ void setup() {
 }
 
 void loop() {
+  // Check WiFi connection
+  checkWiFiConnection();
+  
   // Handle OTA updates
   ArduinoOTA.handle();
   

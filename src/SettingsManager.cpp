@@ -11,6 +11,10 @@ SettingsManager::SettingsManager() {
   settings.maxYaw = 60.0;
   settings.minPitch = -60.0;
   settings.maxPitch = 60.0;
+  // WiFi settings defaults
+  settings.wifiSSID = "";
+  settings.wifiPassword = "";
+  settings.useWiFi = false;
 }
 
 void SettingsManager::loadSettings() {
@@ -51,12 +55,26 @@ void SettingsManager::loadSettings() {
   address += sizeof(float);
   
   settings.maxPitch = readFloatFromEEPROM(address);
+  address += sizeof(float);
+  
+  // Load WiFi settings
+  settings.wifiSSID = readStringFromEEPROM(address, 50);
+  address += 50;
+  
+  settings.wifiPassword = readStringFromEEPROM(address, 50);
+  address += 50;
+  
+  settings.useWiFi = readBoolFromEEPROM(address);
   
   Serial.println("Settings loaded from EEPROM");
   Serial.println("Preset: " + settings.preset);
   Serial.println("Speed: " + String(settings.speed));
   Serial.println("Loop: " + String(settings.loop));
   Serial.println("Position: Yaw=" + String(settings.yaw) + ", Pitch=" + String(settings.pitch));
+  Serial.println("WiFi: " + String(settings.useWiFi ? "Enabled" : "Disabled"));
+  if (settings.useWiFi) {
+    Serial.println("WiFi SSID: " + settings.wifiSSID);
+  }
 }
 
 void SettingsManager::saveSettings(const EyeSettings& newSettings) {
@@ -97,6 +115,16 @@ void SettingsManager::saveSettings(float yaw, float pitch, const String& preset,
   address += sizeof(float);
   
   writeFloatToEEPROM(address, settings.maxPitch);
+  address += sizeof(float);
+  
+  // Save WiFi settings
+  writeStringToEEPROM(address, settings.wifiSSID);
+  address += 50;
+  
+  writeStringToEEPROM(address, settings.wifiPassword);
+  address += 50;
+  
+  writeBoolToEEPROM(address, settings.useWiFi);
   
   EEPROM.commit();
   
@@ -141,4 +169,19 @@ void SettingsManager::writeBoolToEEPROM(int address, bool value) {
 
 bool SettingsManager::readBoolFromEEPROM(int address) {
   return EEPROM.read(address) != 0;
+}
+
+void SettingsManager::saveWiFiSettings(const String& ssid, const String& password, bool useWiFi) {
+  settings.wifiSSID = ssid;
+  settings.wifiPassword = password;
+  settings.useWiFi = useWiFi;
+  
+  // Save all settings to EEPROM
+  saveSettings(settings.yaw, settings.pitch, settings.preset, settings.speed, settings.loop);
+  
+  Serial.println("WiFi settings saved:");
+  Serial.println("Use WiFi: " + String(useWiFi ? "Yes" : "No"));
+  if (useWiFi) {
+    Serial.println("SSID: " + ssid);
+  }
 }

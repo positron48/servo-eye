@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // Auto-generated from ui.html
-// Size: 23701 bytes
+// Size: 26778 bytes
 
 const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 <html lang="en">
@@ -129,6 +129,25 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
     </div>
 
     <div class="control-group">
+      <h3>WiFi Settings</h3>
+      <div class="row">
+        <label class="label-row"><input type="checkbox" id="useWiFi"> Use WiFi Connection</label>
+      </div>
+      <div class="row">
+        <label>WiFi SSID <input id="wifiSSID" type="text" placeholder="Enter WiFi network name"></label>
+        <label>Password <input id="wifiPassword" type="password" placeholder="Enter WiFi password"></label>
+      </div>
+      <div class="row">
+        <label>Current Mode <span id="currentMode" class="value-display">-</span></label>
+        <label>Connection Status <span id="connectionStatus" class="value-display">-</span></label>
+      </div>
+      <div class="button-group">
+        <button class="btn primary" id="saveWiFi">Save WiFi Settings</button>
+        <button class="btn secondary" id="refreshWiFi">Refresh Status</button>
+      </div>
+    </div>
+
+    <div class="control-group">
       <h3>OTA Update</h3>
       <div class="row">
         <label>OTA Hostname <span class="value-display">eye.local</span></label>
@@ -183,6 +202,15 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
   const flashSizeEl=document.getElementById('flashSize');
   const flashUsedEl=document.getElementById('flashUsed');
   const refreshInfoBtn=document.getElementById('refreshInfo');
+  
+  // WiFi elements
+  const useWiFiEl=document.getElementById('useWiFi');
+  const wifiSSIDEl=document.getElementById('wifiSSID');
+  const wifiPasswordEl=document.getElementById('wifiPassword');
+  const currentModeEl=document.getElementById('currentMode');
+  const connectionStatusEl=document.getElementById('connectionStatus');
+  const saveWiFiBtn=document.getElementById('saveWiFi');
+  const refreshWiFiBtn=document.getElementById('refreshWiFi');
 
   const PRESETS={
     'Center Sweep':`-60,0,600\n-30,0,600\n0,0,600\n30,0,600\n60,0,600\n0,0,600`,
@@ -329,9 +357,54 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
       flashSizeEl.textContent = formatBytes(data.flashSize || 0);
       flashUsedEl.textContent = formatBytes(data.flashUsed || 0);
       
+      // Update WiFi status
+      currentModeEl.textContent = data.mode || '-';
+      connectionStatusEl.textContent = data.mode === 'STA' ? 'Connected' : 'AP Mode';
+      
       updateOTAStatus('System info loaded', 'status');
     } catch (error) {
       updateOTAStatus('System info error: ' + error.message, 'error');
+    }
+  }
+
+  async function loadWiFiSettings() {
+    try {
+      const response = await fetch('/api/wifi/settings');
+      if (!response.ok) throw new Error('Network error');
+      const data = await response.json();
+      
+      useWiFiEl.checked = data.useWiFi || false;
+      wifiSSIDEl.value = data.ssid || '';
+      wifiPasswordEl.value = data.password || '';
+      currentModeEl.textContent = data.currentMode || '-';
+      connectionStatusEl.textContent = data.connected ? 'Connected' : 'Disconnected';
+      
+      updateOTAStatus('WiFi settings loaded', 'status');
+    } catch (error) {
+      updateOTAStatus('WiFi settings error: ' + error.message, 'error');
+    }
+  }
+
+  async function saveWiFiSettings() {
+    try {
+      const response = await fetch('/api/wifi/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `ssid=${encodeURIComponent(wifiSSIDEl.value)}&password=${encodeURIComponent(wifiPasswordEl.value)}&useWiFi=${useWiFiEl.checked}`
+      });
+      
+      if (!response.ok) throw new Error('Network error');
+      const data = await response.json();
+      
+      updateOTAStatus(data.message || 'WiFi settings saved', 'status');
+      
+      // Show restart message
+      setTimeout(() => {
+        updateOTAStatus('Device is restarting...', 'warning');
+      }, 2000);
+      
+    } catch (error) {
+      updateOTAStatus('Save WiFi error: ' + error.message, 'error');
     }
   }
 
@@ -464,6 +537,8 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 
   runBtn.onclick=startAnim; stopBtn.onclick=stopAnim; crazyBtn.onclick=crazyAnim;
   refreshInfoBtn.onclick=loadOTAInfo;
+  saveWiFiBtn.onclick=saveWiFiSettings;
+  refreshWiFiBtn.onclick=loadWiFiSettings;
 
   // Pointer drag to control gaze
   let isDrag=false, activeId=null;
@@ -571,6 +646,7 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
   loadSettings();
   loadPosition();
   loadOTAInfo();
+  loadWiFiSettings();
   loop();
 })();
 </script>
@@ -578,6 +654,6 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 </html>
 )rawliteral";
 
-const size_t ui_html_size = 23701;
+const size_t ui_html_size = 26778;
 
 #endif // UI_HTML_H
