@@ -32,7 +32,7 @@ private:
   
   // Servo timeout management
   unsigned long lastMovementTime;
-  static const unsigned long SERVO_TIMEOUT_MS = 300;
+  static const unsigned long SERVO_TIMEOUT_MS = 200; // Reduced from 300ms to 200ms
   bool servosDisabled;
   
   // Limits

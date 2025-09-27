@@ -25,8 +25,9 @@ void ServoController::begin() {
 void ServoController::update() {
   unsigned long currentTime = millis();
   
-  // Check for servo timeout (disable servos after 100ms of no movement)
-  if (!animationRunning && !servosDisabled && (currentTime - lastMovementTime) >= (unsigned long)SERVO_TIMEOUT_MS) {
+  // Check for servo timeout (disable servos after 200ms of no movement)
+  // This works even during animation - if position doesn't change, servos will be disabled
+  if (!servosDisabled && (currentTime - lastMovementTime) >= (unsigned long)SERVO_TIMEOUT_MS) {
     disableServos();
   }
   
@@ -51,27 +52,42 @@ void ServoController::update() {
     // Set position for new frame
     setPosition(current.yaw, current.pitch);
   } else {
-    // Interpolate between current and next frame
-    AnimationFrame& next = animationFrames[(currentFrame + 1) % frameCount];
+    // Get previous frame for comparison
+    AnimationFrame& prev = animationFrames[(currentFrame - 1 + frameCount) % frameCount];
     float progress = (float)elapsed / current.duration;
     
-    float interpolatedYaw = current.yaw + (next.yaw - current.yaw) * progress;
-    float interpolatedPitch = current.pitch + (next.pitch - current.pitch) * progress;
+    // Check if current position is the same as previous (for hold points)
+    bool isHoldPoint = (abs(current.yaw - prev.yaw) < 0.1f && abs(current.pitch - prev.pitch) < 0.1f);
     
-    setPosition(interpolatedYaw, interpolatedPitch);
+    if (isHoldPoint) {
+      // For hold points, just set the position directly (no interpolation)
+      setPosition(current.yaw, current.pitch);
+    } else {
+      // For movement points, use interpolation from previous to current
+      float interpolatedYaw = prev.yaw + (current.yaw - prev.yaw) * progress;
+      float interpolatedPitch = prev.pitch + (current.pitch - prev.pitch) * progress;
+      
+      setPosition(interpolatedYaw, interpolatedPitch);
+    }
   }
 }
 
 void ServoController::setPosition(float yaw, float pitch) {
   // Clamp values to limits
-  currentYaw = constrain(yaw, minYaw, maxYaw);
-  currentPitch = constrain(pitch, minPitch, maxPitch);
+  float newYaw = constrain(yaw, minYaw, maxYaw);
+  float newPitch = constrain(pitch, minPitch, maxPitch);
   
-  // Update last movement time and mark servos as active
-  lastMovementTime = millis();
-  servosDisabled = false;
-  
-  updateServos();
+  // Only update if position actually changed (more than 0.1 degrees)
+  if (abs(newYaw - currentYaw) > 0.1f || abs(newPitch - currentPitch) > 0.1f) {
+    currentYaw = newYaw;
+    currentPitch = newPitch;
+    
+    // Update last movement time and mark servos as active
+    lastMovementTime = millis();
+    servosDisabled = false;
+    
+    updateServos();
+  }
 }
 
 void ServoController::setLimits(float minYaw, float maxYaw, float minPitch, float maxPitch) {

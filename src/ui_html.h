@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // Auto-generated from ui.html
-// Size: 30786 bytes
+// Size: 32884 bytes
 
 const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 <html lang="en">
@@ -87,6 +87,7 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
           <option>Blink Look</option>
           <option>Circle</option>
           <option>Chaos</option>
+          <option>Sleepy</option>
         </select></label>
         <label>Speed <span id="speedLbl" class="value-display">1.0</span><input id="speed" type="range" min="0.1" max="3" step="0.1" value="1"></label>
         <label class="label-row"><input type="checkbox" id="loop" checked> Loop</label>
@@ -271,14 +272,56 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
         
       case 'Chaos':
         const chaosPoints = [];
-        const numPoints = 20;
+        const numPoints = 50; // Increased from 20 to 50
         for(let i = 0; i < numPoints; i++) {
           const yaw = state.minYaw + Math.random() * yawRange;
           const pitch = state.minPitch + Math.random() * pitchRange;
-          const duration = baseDuration * (0.5 + Math.random() * 1.5); // Random duration
+          const duration = baseDuration * (0.3 + Math.random() * 1.2); // Faster, more random duration
           chaosPoints.push(`${yaw.toFixed(1)},${pitch.toFixed(1)},${duration.toFixed(0)}`);
         }
         return chaosPoints.join('\n');
+        
+      case 'Sleepy':
+        const sleepyPoints = [];
+        const numSleepyPoints = 20; // Reduced to 20 for better distribution
+        let lastYaw = center.yaw;
+        let lastPitch = center.pitch;
+        
+        for(let i = 0; i < numSleepyPoints; i++) {
+          // Most of the time stay in center
+          const stayInCenter = Math.random() < 0.5; // 50% chance to stay in center
+          let targetYaw, targetPitch;
+          
+          if (stayInCenter) {
+            // Stay near center with small random variations
+            targetYaw = center.yaw + (Math.random() - 0.5) * yawRange * 0.2; // ±10% of range
+            targetPitch = center.pitch + (Math.random() - 0.5) * pitchRange * 0.2;
+          } else {
+            // Move to random position with significant distance from last position
+            let attempts = 0;
+            do {
+              targetYaw = state.minYaw + Math.random() * yawRange;
+              targetPitch = state.minPitch + Math.random() * pitchRange;
+              attempts++;
+            } while (attempts < 20 && 
+                     (Math.abs(targetYaw - lastYaw) < yawRange * 0.3 || 
+                      Math.abs(targetPitch - lastPitch) < pitchRange * 0.3)); // Ensure 30% minimum distance
+          }
+          
+          // Add fast movement point (100-200ms)
+          const fastMovement = 100 + Math.random() * 100;
+          sleepyPoints.push(`${targetYaw.toFixed(1)},${targetPitch.toFixed(1)},${fastMovement.toFixed(0)}`);
+          
+          // Add hold point (same position, longer duration)
+          const speedMultiplier = state.speed;
+          const baseHoldTime = 2000; // 2 seconds base hold time
+          const holdTime = (baseHoldTime / speedMultiplier) * (0.5 + Math.random() * 1.0); // 0.5-1.5x variation
+          sleepyPoints.push(`${targetYaw.toFixed(1)},${targetPitch.toFixed(1)},${holdTime.toFixed(0)}`);
+          
+          lastYaw = targetYaw;
+          lastPitch = targetPitch;
+        }
+        return sleepyPoints.join('\n');
         
       default:
         return '';
@@ -770,6 +813,6 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 </html>
 )rawliteral";
 
-const size_t ui_html_size = 30786;
+const size_t ui_html_size = 32884;
 
 #endif // UI_HTML_H
