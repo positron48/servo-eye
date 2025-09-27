@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // Auto-generated from ui.html
-// Size: 28664 bytes
+// Size: 30786 bytes
 
 const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 <html lang="en">
@@ -86,6 +86,7 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
           <option>Figure Eight</option>
           <option>Blink Look</option>
           <option>Circle</option>
+          <option>Chaos</option>
         </select></label>
         <label>Speed <span id="speedLbl" class="value-display">1.0</span><input id="speed" type="range" min="0.1" max="3" step="0.1" value="1"></label>
         <label class="label-row"><input type="checkbox" id="loop" checked> Loop</label>
@@ -100,7 +101,6 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
     <div class="button-group">
       <button class="btn primary" id="run">Run</button>
       <button class="btn secondary" id="stop">Stop</button>
-      <button class="btn secondary" id="crazy">Chaos</button>
       <button class="btn secondary" id="center">Center</button>
     </div>
   </div>
@@ -188,7 +188,6 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
   const csvEl=document.getElementById('csv');
   const runBtn=document.getElementById('run');
   const stopBtn=document.getElementById('stop');
-  const crazyBtn=document.getElementById('crazy');
   const centerBtn=document.getElementById('center');
   const presetEl=document.getElementById('preset');
   const statusEl=document.getElementById('status');
@@ -214,12 +213,77 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
   const saveWiFiBtn=document.getElementById('saveWiFi');
   const refreshWiFiBtn=document.getElementById('refreshWiFi');
 
-  const PRESETS={
-    'Center Sweep':`-60,0,600\n-30,0,600\n0,0,600\n30,0,600\n60,0,600\n0,0,600`,
-    'Figure Eight':`-40,20,500\n0,0,500\n40,-20,500\n0,0,500\n-40,-20,500\n0,0,500\n40,20,500\n0,0,500`,
-    'Blink Look':`0,15,300\n0,-15,300\n0,0,300\n30,0,500\n-30,0,500\n0,0,500`,
-    'Circle':`30,0,200\n28,11,200\n21,21,200\n11,28,200\n0,30,200\n-11,28,200\n-21,21,200\n-28,11,200\n-30,0,200\n-28,-11,200\n-21,-21,200\n-11,-28,200\n0,-30,200\n11,-28,200\n21,-21,200\n28,-11,200`
-  };
+  function generatePreset(presetName) {
+    const center = getCenterOffset();
+    const yawRange = state.maxYaw - state.minYaw;
+    const pitchRange = state.maxPitch - state.minPitch;
+    const baseDuration = 500 / state.speed; // Adjust duration based on speed
+    
+    switch(presetName) {
+      case 'Center Sweep':
+        const sweepStep = yawRange / 4;
+        return [
+          `${state.minYaw},${center.pitch},${baseDuration}`,
+          `${state.minYaw + sweepStep},${center.pitch},${baseDuration}`,
+          `${center.yaw},${center.pitch},${baseDuration}`,
+          `${state.maxYaw - sweepStep},${center.pitch},${baseDuration}`,
+          `${state.maxYaw},${center.pitch},${baseDuration}`,
+          `${center.yaw},${center.pitch},${baseDuration}`
+        ].join('\n');
+        
+      case 'Figure Eight':
+        const eightYawRange = yawRange * 0.6;
+        const eightPitchRange = pitchRange * 0.3;
+        return [
+          `${center.yaw - eightYawRange/2},${center.pitch + eightPitchRange/2},${baseDuration}`,
+          `${center.yaw},${center.pitch},${baseDuration}`,
+          `${center.yaw + eightYawRange/2},${center.pitch - eightPitchRange/2},${baseDuration}`,
+          `${center.yaw},${center.pitch},${baseDuration}`,
+          `${center.yaw - eightYawRange/2},${center.pitch - eightPitchRange/2},${baseDuration}`,
+          `${center.yaw},${center.pitch},${baseDuration}`,
+          `${center.yaw + eightYawRange/2},${center.pitch + eightPitchRange/2},${baseDuration}`,
+          `${center.yaw},${center.pitch},${baseDuration}`
+        ].join('\n');
+        
+      case 'Blink Look':
+        const blinkPitchRange = pitchRange * 0.3;
+        const lookYawRange = yawRange * 0.5;
+        return [
+          `${center.yaw},${center.pitch + blinkPitchRange/2},${baseDuration * 0.6}`,
+          `${center.yaw},${center.pitch - blinkPitchRange/2},${baseDuration * 0.6}`,
+          `${center.yaw},${center.pitch},${baseDuration * 0.6}`,
+          `${center.yaw + lookYawRange/2},${center.pitch},${baseDuration}`,
+          `${center.yaw - lookYawRange/2},${center.pitch},${baseDuration}`,
+          `${center.yaw},${center.pitch},${baseDuration}`
+        ].join('\n');
+        
+      case 'Circle':
+        const circleRadius = Math.min(yawRange, pitchRange) * 0.4;
+        const steps = 16;
+        const points = [];
+        for(let i = 0; i < steps; i++) {
+          const angle = (i / steps) * Math.PI * 2;
+          const yaw = center.yaw + Math.cos(angle) * circleRadius;
+          const pitch = center.pitch + Math.sin(angle) * circleRadius;
+          points.push(`${yaw.toFixed(1)},${pitch.toFixed(1)},${baseDuration * 0.4}`);
+        }
+        return points.join('\n');
+        
+      case 'Chaos':
+        const chaosPoints = [];
+        const numPoints = 20;
+        for(let i = 0; i < numPoints; i++) {
+          const yaw = state.minYaw + Math.random() * yawRange;
+          const pitch = state.minPitch + Math.random() * pitchRange;
+          const duration = baseDuration * (0.5 + Math.random() * 1.5); // Random duration
+          chaosPoints.push(`${yaw.toFixed(1)},${pitch.toFixed(1)},${duration.toFixed(0)}`);
+        }
+        return chaosPoints.join('\n');
+        
+      default:
+        return '';
+    }
+  }
 
   const state={yaw:0,pitch:0,minYaw:-60,maxYaw:60,minPitch:-60,maxPitch:60,speed:1,loop:true,R:300,anim:null,irisAngle:0.42,pupilAngle:0.14};
 
@@ -319,7 +383,7 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
       speedEl.value = data.speed || 1;
       document.getElementById('loop').checked = data.loop !== false;
       
-      csvEl.value = PRESETS[presetEl.value] || '';
+      csvEl.value = generatePreset(presetEl.value) || '';
       updateSpeedLabel();
       updateStatus('Settings loaded', 'status');
     } catch (error) {
@@ -499,9 +563,9 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
   }
 
   // Initialize
-  csvEl.value=PRESETS['Center Sweep'];
+  csvEl.value=generatePreset('Center Sweep');
   presetEl.onchange=()=>{
-    csvEl.value=PRESETS[presetEl.value]||'';
+    csvEl.value=generatePreset(presetEl.value)||'';
     saveSettings();
   };
   
@@ -509,6 +573,12 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
   setToCenter();
 
   function sync(){
+    const oldMinYaw = state.minYaw;
+    const oldMaxYaw = state.maxYaw;
+    const oldMinPitch = state.minPitch;
+    const oldMaxPitch = state.maxPitch;
+    const oldSpeed = state.speed;
+    
     state.minYaw=+minYawEl.value; state.maxYaw=+maxYawEl.value;
     state.minPitch=+minPitchEl.value; state.maxPitch=+maxPitchEl.value;
     state.yaw=clamp(+yawEl.value,state.minYaw,state.maxYaw);
@@ -520,6 +590,15 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
     sendPosition(state.yaw, state.pitch);
     state.speed=+speedEl.value; updateSpeedLabel();
     state.loop=document.getElementById('loop').checked;
+    
+    // Regenerate preset if limits or speed changed
+    const limitsChanged = (oldMinYaw !== state.minYaw || oldMaxYaw !== state.maxYaw || 
+                          oldMinPitch !== state.minPitch || oldMaxPitch !== state.maxPitch);
+    const speedChanged = oldSpeed !== state.speed;
+    
+    if (limitsChanged || speedChanged) {
+      csvEl.value = generatePreset(presetEl.value);
+    }
   }
 
   ;['input','change'].forEach(ev=>{
@@ -560,33 +639,8 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
     stopAnimation();
   }
 
-  function crazyAnim(){
-    state.anim={running:true};
-    let phase='jump',t0=performance.now();let sx=state.yaw,sy=state.pitch;let tx=randomYaw(),ty=randomPitch();let holdFor=200;
-    function randomYaw(){return clamp((Math.random()*(state.maxYaw-state.minYaw)+state.minYaw),state.minYaw,state.maxYaw);} 
-    function randomPitch(){return clamp((Math.random()*(state.maxPitch-state.minPitch)+state.minPitch),state.minPitch,state.maxPitch);} 
-    function tick(now){
-      if(!state.anim.running)return;
-      const dt=(now-t0)*state.speed;
-      if(phase==='jump'){
-        const prog=Math.min(1,dt/120);
-        state.yaw=sx+(tx-sx)*prog;
-        state.pitch=sy+(ty-sy)*prog;
-        yawEl.value=state.yaw.toFixed(1); pitchEl.value=state.pitch.toFixed(1);
-        updateLabels();
-        draw();
-        sendPosition(state.yaw, state.pitch);
-        if(prog>=1){phase='hold';t0=now;holdFor=200+Math.random()*600;}
-      }else{
-        draw();
-        if(dt>=holdFor){phase='jump';t0=now;sx=state.yaw;sy=state.pitch;tx=randomYaw();ty=randomPitch();}
-      }
-      requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-  } 
 
-  runBtn.onclick=startAnim; stopBtn.onclick=stopAnim; crazyBtn.onclick=crazyAnim;
+  runBtn.onclick=startAnim; stopBtn.onclick=stopAnim;
   centerBtn.onclick=setToCenter;
   refreshInfoBtn.onclick=loadOTAInfo;
   saveWiFiBtn.onclick=saveWiFiSettings;
@@ -716,6 +770,6 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 </html>
 )rawliteral";
 
-const size_t ui_html_size = 28664;
+const size_t ui_html_size = 30786;
 
 #endif // UI_HTML_H
