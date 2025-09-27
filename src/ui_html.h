@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // Auto-generated from ui.html
-// Size: 26778 bytes
+// Size: 28664 bytes
 
 const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 <html lang="en">
@@ -101,6 +101,7 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
       <button class="btn primary" id="run">Run</button>
       <button class="btn secondary" id="stop">Stop</button>
       <button class="btn secondary" id="crazy">Chaos</button>
+      <button class="btn secondary" id="center">Center</button>
     </div>
   </div>
   
@@ -188,6 +189,7 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
   const runBtn=document.getElementById('run');
   const stopBtn=document.getElementById('stop');
   const crazyBtn=document.getElementById('crazy');
+  const centerBtn=document.getElementById('center');
   const presetEl=document.getElementById('preset');
   const statusEl=document.getElementById('status');
   
@@ -454,29 +456,78 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
     pitchLbl.textContent = state.pitch.toFixed(1) + "°";
   }
 
+  function calculateCenter() {
+    return {
+      yaw: (state.minYaw + state.maxYaw) / 2,
+      pitch: (state.minPitch + state.maxPitch) / 2
+    };
+  }
+
+  function getCenterOffset() {
+    return {
+      yaw: (state.minYaw + state.maxYaw) / 2,
+      pitch: (state.minPitch + state.maxPitch) / 2
+    };
+  }
+
+  function toRelativePosition(yaw, pitch) {
+    const center = getCenterOffset();
+    return {
+      yaw: yaw - center.yaw,
+      pitch: pitch - center.pitch
+    };
+  }
+
+  function toAbsolutePosition(relativeYaw, relativePitch) {
+    const center = getCenterOffset();
+    return {
+      yaw: relativeYaw + center.yaw,
+      pitch: relativePitch + center.pitch
+    };
+  }
+
+  function setToCenter() {
+    const center = calculateCenter();
+    state.yaw = center.yaw;
+    state.pitch = center.pitch;
+    yawEl.value = state.yaw.toFixed(1);
+    pitchEl.value = state.pitch.toFixed(1);
+    updateLabels();
+    draw();
+    sendPosition(state.yaw, state.pitch);
+    console.log('Centered to:', center.yaw, center.pitch, 'Range:', state.minYaw, state.maxYaw, state.minPitch, state.maxPitch);
+  }
+
   // Initialize
   csvEl.value=PRESETS['Center Sweep'];
   presetEl.onchange=()=>{
     csvEl.value=PRESETS[presetEl.value]||'';
     saveSettings();
   };
+  
+  // Set initial position to center
+  setToCenter();
 
   function sync(){
     state.minYaw=+minYawEl.value; state.maxYaw=+maxYawEl.value;
     state.minPitch=+minPitchEl.value; state.maxPitch=+maxPitchEl.value;
     state.yaw=clamp(+yawEl.value,state.minYaw,state.maxYaw);
     state.pitch=clamp(+pitchEl.value,state.minPitch,state.maxPitch);
+    yawEl.value = state.yaw.toFixed(1);
+    pitchEl.value = state.pitch.toFixed(1);
     updateLabels();
+    draw();
+    sendPosition(state.yaw, state.pitch);
     state.speed=+speedEl.value; updateSpeedLabel();
     state.loop=document.getElementById('loop').checked;
-    
-    // Send position to ESP8266
-    sendPosition(state.yaw, state.pitch);
   }
 
   ;['input','change'].forEach(ev=>{
     [yawEl,pitchEl,minYawEl,maxYawEl,minPitchEl,maxPitchEl,speedEl,document.getElementById('loop')].forEach(el=>el.addEventListener(ev,sync));
   });
+  
+  // Visual center now automatically corresponds to mathematical center
+  // No need to force centering when limits change
 
   // Animation functions
   function parseCSV(t){return t.split(/\n/).map(l=>l.trim()).filter(Boolean).map(l=>{let[a,b,c]=l.split(/[,;\s]+/);return{yaw:+a,pitch:+b,dur:+c}})}
@@ -536,6 +587,7 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
   } 
 
   runBtn.onclick=startAnim; stopBtn.onclick=stopAnim; crazyBtn.onclick=crazyAnim;
+  centerBtn.onclick=setToCenter;
   refreshInfoBtn.onclick=loadOTAInfo;
   saveWiFiBtn.onclick=saveWiFiSettings;
   refreshWiFiBtn.onclick=loadWiFiSettings;
@@ -556,18 +608,26 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
     let gy0 = -dy / k;
     gx0 = clamp(gx0, -1, 1);
     gy0 = clamp(gy0, -1, 1);
-    let pitchDeg = -Math.asin(gy0)*180/Math.PI;
-    pitchDeg = clamp(Math.round(pitchDeg*10)/10, state.minPitch, state.maxPitch);
-    const cp = Math.cos(deg2rad(pitchDeg));
-    let yawDeg;
+    
+    // Calculate relative position (centered around 0,0)
+    let relativePitchDeg = -Math.asin(gy0)*180/Math.PI;
+    const cp = Math.cos(deg2rad(relativePitchDeg));
+    let relativeYawDeg;
     if(cp < 1e-6){
-      yawDeg = state.yaw;
+      relativeYawDeg = 0;
     }else{
       let sinYaw = gx0 / cp;
       sinYaw = clamp(sinYaw, -1, 1);
-      yawDeg = Math.asin(sinYaw)*180/Math.PI;
+      relativeYawDeg = Math.asin(sinYaw)*180/Math.PI;
     }
-    yawDeg = clamp(Math.round(yawDeg*10)/10, state.minYaw, state.maxYaw);
+    
+    // Convert to absolute position
+    const absolute = toAbsolutePosition(relativeYawDeg, relativePitchDeg);
+    
+    // Clamp to limits
+    const yawDeg = clamp(Math.round(absolute.yaw*10)/10, state.minYaw, state.maxYaw);
+    const pitchDeg = clamp(Math.round(absolute.pitch*10)/10, state.minPitch, state.maxPitch);
+    
     state.yaw = yawDeg;
     state.pitch = pitchDeg;
     yawEl.value=state.yaw.toFixed(1); pitchEl.value=state.pitch.toFixed(1);
@@ -604,7 +664,9 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
     const norm=v=>{const L=Math.hypot(v.x,v.y,v.z)||1; return mul(v,1/L)};
     const cross=(a,b)=>vec3(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x);
     function gazeVec(pitchDeg,yawDeg){
-      const p=deg2rad(pitchDeg), y=deg2rad(yawDeg);
+      // Convert to relative position (centered around 0,0)
+      const relative = toRelativePosition(yawDeg, pitchDeg);
+      const p=deg2rad(relative.pitch), y=deg2rad(relative.yaw);
       const cp=Math.cos(p), sp=Math.sin(p); const cy=Math.cos(y), sy=Math.sin(y);
       return norm(vec3(sy*cp, -sp, cy*cp));
     }
@@ -654,6 +716,6 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 </html>
 )rawliteral";
 
-const size_t ui_html_size = 26778;
+const size_t ui_html_size = 28664;
 
 #endif // UI_HTML_H

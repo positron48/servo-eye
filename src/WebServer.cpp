@@ -124,7 +124,7 @@ void WebServer::setupRoutes() {
       doc["mode"] = "STA";
     }
     
-    doc["version"] = "1.0.2"; // You can update this version number
+    doc["version"] = "1.0.3"; // You can update this version number
     doc["uptime"] = millis() / 1000;
     doc["freeHeap"] = ESP.getFreeHeap();
     doc["flashSize"] = ESP.getFlashChipSize();
