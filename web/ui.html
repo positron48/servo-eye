@@ -95,6 +95,51 @@
       <button class="btn secondary" id="crazy">Chaos</button>
     </div>
   </div>
+  
+  <div class="card panel">
+    <h1>System Information</h1>
+    <div id="otaStatus" class="status">Loading system info...</div>
+    
+    <div class="control-group">
+      <h3>Device Info</h3>
+      <div class="row">
+        <label>Hostname <span id="hostname" class="value-display">-</span></label>
+        <label>IP Address <span id="ipAddress" class="value-display">-</span></label>
+        <label>MAC Address <span id="macAddress" class="value-display">-</span></label>
+        <label>Version <span id="version" class="value-display">-</span></label>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h3>System Status</h3>
+      <div class="row">
+        <label>Uptime <span id="uptime" class="value-display">-</span></label>
+        <label>Free Heap <span id="freeHeap" class="value-display">-</span></label>
+        <label>Flash Size <span id="flashSize" class="value-display">-</span></label>
+        <label>Flash Used <span id="flashUsed" class="value-display">-</span></label>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <h3>OTA Update</h3>
+      <div class="row">
+        <label>OTA Hostname <span class="value-display">eye.local</span></label>
+        <label>OTA Port <span class="value-display">8266</span></label>
+        <label>OTA Password <span class="value-display">12345678</span></label>
+      </div>
+      <div style="margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 4px; font-size: 13px; line-height: 1.4;">
+        <strong>Instructions for OTA Update:</strong><br>
+        1. Connect to WiFi network "EyeController" (password: 12345678)<br>
+        2. Use PlatformIO: <code>pio run -e d1_mini_ota -t upload</code><br>
+        3. Or Arduino IDE: select "eye.local at 192.168.4.1"<br>
+        4. Use password "12345678" for OTA authentication
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn secondary" id="refreshInfo">Refresh Info</button>
+    </div>
+  </div>
 </div>
 <script>
 (function(){
@@ -118,6 +163,18 @@
   const crazyBtn=document.getElementById('crazy');
   const presetEl=document.getElementById('preset');
   const statusEl=document.getElementById('status');
+  
+  // OTA elements
+  const otaStatusEl=document.getElementById('otaStatus');
+  const hostnameEl=document.getElementById('hostname');
+  const ipAddressEl=document.getElementById('ipAddress');
+  const macAddressEl=document.getElementById('macAddress');
+  const versionEl=document.getElementById('version');
+  const uptimeEl=document.getElementById('uptime');
+  const freeHeapEl=document.getElementById('freeHeap');
+  const flashSizeEl=document.getElementById('flashSize');
+  const flashUsedEl=document.getElementById('flashUsed');
+  const refreshInfoBtn=document.getElementById('refreshInfo');
 
   const PRESETS={
     'Center Sweep':`-60,0,600\n-30,0,600\n0,0,600\n30,0,600\n60,0,600\n0,0,600`,
@@ -249,6 +306,53 @@
     }
   }
 
+  async function loadOTAInfo() {
+    try {
+      const response = await fetch('/api/ota/status');
+      if (!response.ok) throw new Error('Network error');
+      const data = await response.json();
+      
+      hostnameEl.textContent = data.hostname || '-';
+      ipAddressEl.textContent = data.ip || '-';
+      macAddressEl.textContent = data.mac || '-';
+      versionEl.textContent = data.version || '-';
+      uptimeEl.textContent = formatUptime(data.uptime || 0);
+      freeHeapEl.textContent = formatBytes(data.freeHeap || 0);
+      flashSizeEl.textContent = formatBytes(data.flashSize || 0);
+      flashUsedEl.textContent = formatBytes(data.flashUsed || 0);
+      
+      updateOTAStatus('System info loaded', 'status');
+    } catch (error) {
+      updateOTAStatus('System info error: ' + error.message, 'error');
+    }
+  }
+
+  function formatUptime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours}h ${minutes}m ${secs}s`;
+  }
+
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  function updateOTAStatus(message, type = 'status') {
+    otaStatusEl.textContent = message;
+    otaStatusEl.className = `status ${type}`;
+    if (type === 'error' || type === 'warning') {
+      setTimeout(() => {
+        otaStatusEl.textContent = 'System info loaded';
+        otaStatusEl.className = 'status';
+      }, 3000);
+    }
+  }
+
   function updateStatus(message, type = 'status') {
     statusEl.textContent = message;
     statusEl.className = `status ${type}`;
@@ -351,6 +455,7 @@
   } 
 
   runBtn.onclick=startAnim; stopBtn.onclick=stopAnim; crazyBtn.onclick=crazyAnim;
+  refreshInfoBtn.onclick=loadOTAInfo;
 
   // Pointer drag to control gaze
   let isDrag=false, activeId=null;
@@ -457,6 +562,7 @@
   sync();
   loadSettings();
   loadPosition();
+  loadOTAInfo();
   loop();
 })();
 </script>

@@ -107,6 +107,23 @@ void WebServer::setupRoutes() {
     serializeJson(doc, response);
     server->send(200, "application/json", response);
   });
+
+  // OTA status endpoint
+  server->on("/api/ota/status", HTTP_GET, [this]() {
+    JsonDocument doc;
+    doc["hostname"] = "eye";
+    doc["ip"] = WiFi.softAPIP().toString();
+    doc["mac"] = WiFi.softAPmacAddress();
+    doc["version"] = "1.0.1"; // You can update this version number
+    doc["uptime"] = millis() / 1000;
+    doc["freeHeap"] = ESP.getFreeHeap();
+    doc["flashSize"] = ESP.getFlashChipSize();
+    doc["flashUsed"] = ESP.getFlashChipSize() - ESP.getFreeSketchSpace();
+    
+    String response;
+    serializeJson(doc, response);
+    server->send(200, "application/json", response);
+  });
 }
 
 void WebServer::serveCompressedHTML(const char* htmlData, size_t htmlSize) {
