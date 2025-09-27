@@ -103,6 +103,13 @@ void WebServer::setupRoutes() {
     doc["speed"] = eyeState.speed;
     doc["loop"] = eyeState.loop;
     
+    // Get limits from settings manager
+    const EyeSettings& settings = settingsManager.getSettings();
+    doc["minYaw"] = settings.minYaw;
+    doc["maxYaw"] = settings.maxYaw;
+    doc["minPitch"] = settings.minPitch;
+    doc["maxPitch"] = settings.maxPitch;
+    
     String response;
     serializeJson(doc, response);
     server->send(200, "application/json", response);
@@ -163,6 +170,27 @@ void WebServer::setupRoutes() {
       // Restart after a short delay to allow response to be sent
       delay(1000);
       ESP.restart();
+    } else {
+      server->send(400, "application/json", "{\"error\":\"Missing parameters\"}");
+    }
+  });
+
+  // API endpoint for saving limits
+  server->on("/api/limits", HTTP_POST, [this]() {
+    if (server->hasArg("minYaw") && server->hasArg("maxYaw") && 
+        server->hasArg("minPitch") && server->hasArg("maxPitch")) {
+      float minYaw = server->arg("minYaw").toFloat();
+      float maxYaw = server->arg("maxYaw").toFloat();
+      float minPitch = server->arg("minPitch").toFloat();
+      float maxPitch = server->arg("maxPitch").toFloat();
+      
+      // Update servo controller limits
+      servoController.setLimits(minYaw, maxYaw, minPitch, maxPitch);
+      
+      // Save to EEPROM
+      settingsManager.saveLimits(minYaw, maxYaw, minPitch, maxPitch);
+      
+      server->send(200, "application/json", "{\"status\":\"ok\"}");
     } else {
       server->send(400, "application/json", "{\"error\":\"Missing parameters\"}");
     }

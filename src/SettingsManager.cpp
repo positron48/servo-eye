@@ -171,6 +171,20 @@ bool SettingsManager::readBoolFromEEPROM(int address) {
   return EEPROM.read(address) != 0;
 }
 
+void SettingsManager::saveLimits(float minYaw, float maxYaw, float minPitch, float maxPitch) {
+  settings.minYaw = minYaw;
+  settings.maxYaw = maxYaw;
+  settings.minPitch = minPitch;
+  settings.maxPitch = maxPitch;
+  
+  // Save all settings to EEPROM
+  saveSettings(settings.yaw, settings.pitch, settings.preset, settings.speed, settings.loop);
+  
+  Serial.println("Limits saved:");
+  Serial.println("Yaw: " + String(minYaw) + " to " + String(maxYaw));
+  Serial.println("Pitch: " + String(minPitch) + " to " + String(maxPitch));
+}
+
 void SettingsManager::saveWiFiSettings(const String& ssid, const String& password, bool useWiFi) {
   settings.wifiSSID = ssid;
   settings.wifiPassword = password;

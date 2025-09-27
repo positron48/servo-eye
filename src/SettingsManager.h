@@ -41,6 +41,7 @@ public:
   void loadSettings();
   void saveSettings(const EyeSettings& newSettings);
   void saveSettings(float yaw, float pitch, const String& preset, float speed, bool loop);
+  void saveLimits(float minYaw, float maxYaw, float minPitch, float maxPitch);
   void saveWiFiSettings(const String& ssid, const String& password, bool useWiFi);
   
   const EyeSettings& getSettings() const { return settings; }

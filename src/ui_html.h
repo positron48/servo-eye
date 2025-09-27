@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // Auto-generated from ui.html
-// Size: 32884 bytes
+// Size: 33919 bytes
 
 const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 <html lang="en">
@@ -426,6 +426,15 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
       speedEl.value = data.speed || 1;
       document.getElementById('loop').checked = data.loop !== false;
       
+      // Load limits
+      if (data.minYaw !== undefined) minYawEl.value = data.minYaw;
+      if (data.maxYaw !== undefined) maxYawEl.value = data.maxYaw;
+      if (data.minPitch !== undefined) minPitchEl.value = data.minPitch;
+      if (data.maxPitch !== undefined) maxPitchEl.value = data.maxPitch;
+      
+      // Update state and UI
+      sync();
+      
       csvEl.value = generatePreset(presetEl.value) || '';
       updateSpeedLabel();
       updateStatus('Settings loaded', 'status');
@@ -514,6 +523,24 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
       
     } catch (error) {
       updateOTAStatus('Save WiFi error: ' + error.message, 'error');
+    }
+  }
+
+  async function saveLimits() {
+    try {
+      const response = await fetch('/api/limits', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: `minYaw=${state.minYaw}&maxYaw=${state.maxYaw}&minPitch=${state.minPitch}&maxPitch=${state.maxPitch}`
+      });
+      
+      if (!response.ok) throw new Error('Network error');
+      const data = await response.json();
+      
+      console.log('Limits saved successfully');
+      
+    } catch (error) {
+      console.error('Save limits error:', error.message);
     }
   }
 
@@ -641,6 +668,11 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
     
     if (limitsChanged || speedChanged) {
       csvEl.value = generatePreset(presetEl.value);
+    }
+    
+    // Save limits to EEPROM if they changed
+    if (limitsChanged) {
+      saveLimits();
     }
   }
 
@@ -813,6 +845,6 @@ const char ui_html_data[] = R"rawliteral(<!DOCTYPE html>
 </html>
 )rawliteral";
 
-const size_t ui_html_size = 32884;
+const size_t ui_html_size = 33919;
 
 #endif // UI_HTML_H
