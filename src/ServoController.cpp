@@ -139,10 +139,10 @@ void ServoController::stopAnimation() {
   Serial.println("Animation stopped");
 }
 
-float ServoController::mapAngleToPWM(float angle, float minAngle, float maxAngle) {
+float ServoController::mapAngleToPWM(float angle) {
   // Map angle to PWM value (500-2500 microseconds)
-  // Assuming servo range is 180 degrees
-  float normalized = (angle - minAngle) / (maxAngle - minAngle);
+  // Используем полный физический диапазон сервы, не ограничения
+  float normalized = (angle - SERVO_ANGLE_MIN) / (SERVO_ANGLE_MAX - SERVO_ANGLE_MIN);
   return 500 + normalized * 2000; // 500-2500 microseconds
 }
 
@@ -161,9 +161,10 @@ void ServoController::updateServos() {
   }
   
   // Convert angles to PWM values
-  float yawPWM = mapAngleToPWM(currentYaw, minYaw, maxYaw);
-  // Invert pitch servo by swapping min and max angles
-  float pitchPWM = mapAngleToPWM(currentPitch, maxPitch, minPitch);
+  // Используем полный физический диапазон сервы, не ограничения
+  float yawPWM = mapAngleToPWM(currentYaw);
+  // Invert pitch servo (просто инвертируем угол)
+  float pitchPWM = mapAngleToPWM(-currentPitch);
   
   // Write to servos
   yawServo.writeMicroseconds((int)yawPWM);
